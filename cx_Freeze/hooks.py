@@ -610,7 +610,7 @@ def load_mkl(finder: ModuleFinder, module: Module) -> None:
 
 
 def load_numpy(finder: ModuleFinder, module: Module) -> None:
-    """"The numpy must be loaded as a package; support for pypi version and
+    """The numpy must be loaded as a package; support for pypi version and
     numpy+mkl version (tested with 1.19.5+mkl and 1.20.3+mkl."""
     finder.IncludePackage("numpy")
 
@@ -786,11 +786,6 @@ def load_postgresql_lib(finder: ModuleFinder, module: Module) -> None:
 def load_pty(finder: ModuleFinder, module: Module) -> None:
     """The sgi module is not needed for this module to function."""
     module.ignore_names.add("sgi")
-
-
-def load_ptr(finder: ModuleFinder, module: Module) -> None:
-    """pytest-runner requires its metadata"""
-    module.update_distribution("pytest-runner")
 
 
 def load_pycountry(finder: ModuleFinder, module: Module) -> None:
@@ -1411,11 +1406,6 @@ def load_xml_etree_cElementTree(finder: ModuleFinder, module: Module) -> None:
     xml.etree.ElementTree module; make sure this happens.
     """
     finder.IncludeModule("xml.etree.ElementTree")
-
-
-def load_yaml(finder: ModuleFinder, module: Module) -> None:
-    """PyYAML requires its metadata"""
-    module.update_distribution("PyYAML")
 
 
 def load_zmq(finder: ModuleFinder, module: Module) -> None:

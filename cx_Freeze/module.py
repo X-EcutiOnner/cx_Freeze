@@ -61,14 +61,18 @@ class Module:
         self.update_distribution(name)
 
     def update_distribution(self, name: str) -> None:
-        """Update the distribution cache. This method may be used to when the
-        name of the distribution is different of the import name.
+        """Update the distribution cache based on its name.
+        This method may be used to link an distribution's name to a module.
 
-        Example: ModuleFinder detects the name yaml (the package name), but
-        the distribution name is PyYAML. So, a hook can use this method.
+        Example: ModuleFinder cannot detects the distribution of _cffi_backend
+        but in a hook we can link it to 'cffi'.
         """
-        dist = self._cache_dist_info(name)
-        if dist is None:
+        distribution = None
+        for distribution_name in self._distribution_names(name):
+            dist = self._cache_dist_info(distribution_name)
+            if dist and distribution is None:
+                distribution = dist
+        if distribution is None:
             return
         try:
             requires = importlib_metadata.requires(name)
@@ -78,7 +82,7 @@ class Module:
             for req in requires:
                 req_name = req.partition(" ")[0]
                 self._cache_dist_info(req_name)
-        self.distribution = dist
+        self.distribution = distribution
 
     def _cache_dist_info(self, name: str) -> Optional[DistributionCache]:
         """Cache the dist-info files in a temporary directory."""
@@ -88,7 +92,7 @@ class Module:
         except importlib_metadata.PackageNotFoundError:
             files = []
         # select only dist-info files
-        files = [file for file in files if file.match("*.dist-info/*")]
+        files = [file for file in files if file.match(f"{name}-*.dist-info/*")]
         for file in files:
             src_path = file.locate()
             if not src_path.exists():
@@ -97,10 +101,27 @@ class Module:
             if dist_dir is None:
                 dist_dir = dst_path.parent
                 dist_dir.mkdir(exist_ok=True)
+            # dst_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src_path, dst_path)
         if dist_dir is None:
             return None
         return DistributionCache.at(dist_dir)
+
+    @staticmethod
+    def _distribution_names(name: str) -> Set[str]:
+        names = {name}
+        try:
+            raw_names = importlib_metadata.packages_distributions()[name]
+        except KeyError:
+            pass
+        else:
+            # the names can be weird, for instance, a module named 'ptr'
+            # is registered with the distribution name 'pytest-runner'
+            # and the directory of dist-info files starts with 'pytest_runner'
+            # (pytest_runner-5.3.1.dist-info)
+            names.update(raw_names)
+            names.update([raw.replace("-", "_") for raw in raw_names])
+        return names
 
     def __repr__(self) -> str:
         parts = [f"name={self.name!r}"]
