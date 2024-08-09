@@ -74,8 +74,8 @@ def prepare_parser() -> argparse.ArgumentParser:
         "--base-name",
         metavar="NAME",
         help="the name of the base executable; the pre-defined values are: "
-        '"console" (default), "gui" and "service"; a user-defined base '
-        "is accepted if it is given with an absolute path name",
+        '"console", "gui" and "service"; a user-defined base is accepted '
+        "if it is given with an absolute path name [default: console]",
     )
     parser.add_argument(
         "--target-name",
@@ -176,7 +176,7 @@ def main() -> None:
     if script is None:
         if command is None:
             parser.error("--script or command must be specified")
-        elif not command.startswith(("build", "bdist")):
+        elif not command.startswith(("build", "bdist", "install")):
             args.script, command = command, script  # backwards compatible
             deprecated.append("usage: required to use --script NAME")
     if command is None:
