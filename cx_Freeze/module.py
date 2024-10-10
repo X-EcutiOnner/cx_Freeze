@@ -86,6 +86,10 @@ class DistributionCache(metadata.PathDistribution):
             if source.is_file():
                 target = target_path / "METADATA"
                 target.write_bytes(source.read_bytes())
+            source = source_path / "entry_points.txt"
+            if source.is_file():
+                target = target_path / "entry_points.txt"
+                target.write_bytes(source.read_bytes())
             source = source_path / "top_level.txt"
             if source.is_file():
                 target = target_path / "top_level.txt"
@@ -443,9 +447,7 @@ class ConstantsModule:
         self.values["BUILD_HOST"] = socket.gethostname().split(".")[0]
         self.values["SOURCE_TIMESTAMP"] = stamp.strftime(self.time_format)
         parts = []
-        names = list(self.values.keys())
-        names.sort()
-        for name in names:
+        for name in sorted(self.values.keys()):
             value = self.values[name]
             parts.append(f"{name} = {value!r}")
         module_path = tmp_path.joinpath(self.module_name).with_suffix(".py")

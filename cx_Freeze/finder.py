@@ -537,7 +537,10 @@ class ModuleFinder:
             # Insert a bytecode to set __package__ as module.parent.name
             codes = [LOAD_CONST, pkg_const_index, STORE_NAME, pkg_name_index]
             codestring = bytes(codes) + code.co_code
-            consts.append(module.parent.name)
+            if module.file.stem == "__init__":
+                consts.append(module.name)
+            else:
+                consts.append(module.parent.name)
             code = code_object_replace(
                 code, co_code=codestring, co_consts=consts
             )
@@ -803,11 +806,8 @@ class ModuleFinder:
         """Display a list of modules that weren't found."""
         if self._bad_modules:
             print("Missing modules:")
-            names = list(self._bad_modules.keys())
-            names.sort()
-            for name in names:
-                callers = list(self._bad_modules[name].keys())
-                callers.sort()
+            for name in sorted(self._bad_modules.keys()):
+                callers = sorted(self._bad_modules[name].keys())
                 print(f"? {name} imported from", ", ".join(callers))
             print("This is not necessarily a problem - the modules ", end="")
             print("may not be needed on this platform.\n")

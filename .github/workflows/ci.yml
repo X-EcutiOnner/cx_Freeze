@@ -11,32 +11,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  pre_commit:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: marcelotduarte/setup-python-uv-action@new
-        with:
-          cache: 'packages'
-          python-version: '3.12'
-
-      - name: Install dependencies
-        run: uv pip install -e.[dev,doc]
-
-      - name: Run pre-commit
-        run: >-
-          pre-commit run --show-diff-on-failure --color=always
-          --all-files --hook-stage=manual
-
   tests:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-13]
-        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+        python-version: ['3.9', '3.10', '3.11', '3.12']
         include:
           - os: macos-14  # macos-14 is apple silicon
             python-version: '3.11'
@@ -87,7 +67,7 @@ jobs:
         with:
           name: cx-freeze-pip-${{ matrix.os }}-${{ matrix.python-version }}
           path: wheelhouse
-          retention-days: 5
+          retention-days: 2
           compression-level: 0  # wheel is a zip file
 
       - name: Install cx_Freeze and dependencies

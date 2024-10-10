@@ -186,7 +186,7 @@ class BuildBases(setuptools.command.build_ext.build_ext):
         # Use gendef and dlltool to generate the library (.a and .delay.a)
         dll_path = self._get_dll_path(name)
         gendef_exe = Path(which("gendef"))
-        def_data = check_output(_make_strs([gendef_exe, "-", dll_path]))
+        def_data = check_output([gendef_exe, "-", dll_path])
         def_name = library_dir / f"{name}.def"
         def_name.write_bytes(def_data)
         lib_path = library_dir / f"lib{name}.a"
@@ -197,10 +197,10 @@ class BuildBases(setuptools.command.build_ext.build_ext):
         output_delaylib_args = ["-y", dlb_path]
         try:
             # GNU binutils dlltool support --output-delaylib
-            check_call(_make_strs(dlltool + output_delaylib_args))
+            check_call(dlltool + output_delaylib_args)
         except CalledProcessError:
             # LLVM dlltool only supports generating an import library
-            check_call(_make_strs(dlltool))
+            check_call(dlltool)
             library = name
         return os.fspath(library_dir), library
 
@@ -230,11 +230,24 @@ class BuildBases(setuptools.command.build_ext.build_ext):
             return
         root = tkinter.Tk(useTk=False)
         tcl_library = Path(root.tk.exprstring("$tcl_library"))
-        tk_library = tcl_library.parent / tcl_library.name.replace("tcl", "tk")
+        path_to_copy = []
+        if tcl_library.name == "Scripts":  # Frameworks on macOS
+            tcl_name = f"tcl{tkinter.TclVersion}"
+            path_to_copy.append((tcl_library, tcl_name))
+            tcl8_name = Path(tcl_name).with_suffix("").name
+            path_to_copy.append((tcl_library.parent / tcl8_name, tcl8_name))
+            tk_library = Path(tcl_library.as_posix().replace("Tcl", "Tk"))
+            path_to_copy.append((tk_library, tcl_name.replace("tcl", "tk")))
+        else:
+            tcl_name = tcl_library.name
+            path_to_copy.append((tcl_library, tcl_name))
+            tcl8_path = Path(tcl_library).with_suffix("")
+            path_to_copy.append((tcl8_path, tcl8_path.name))
+            tk_library = tcl_library.parent / tcl_name.replace("tcl", "tk")
+            path_to_copy.append((tk_library, tk_library.name))
         # source paths of tcl8.6, tcl8 and tk8.6
-        source_paths = [tcl_library, tcl_library.with_suffix(""), tk_library]
-        for source_path in source_paths:
-            target_path = f"{bases}/share/{source_path.name}"
+        for source_path, target_name in path_to_copy:
+            target_path = f"{bases}/share/{target_name}"
             self.mkpath(target_path)
             for source in source_path.rglob("*"):
                 target = os.fspath(
@@ -248,13 +261,6 @@ class BuildBases(setuptools.command.build_ext.build_ext):
     def run(self) -> None:
         self._copy_libraries_to_bases()
         super().run()
-
-
-def _make_strs(paths: list[str | Path]) -> list[str]:
-    """Convert paths to strings for legacy compatibility."""
-    if sys.version_info > (3, 8) and not (IS_MINGW or IS_WINDOWS):
-        return paths
-    return list(map(os.fspath, paths))
 
 
 def get_extensions() -> list[Extension]:

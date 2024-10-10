@@ -49,18 +49,19 @@ class Parser(ABC):
         self._silent: int = silent
 
         self.dependent_files: dict[Path, set[Path]] = {}
-        self.linker_warnings: set = set()
+        self.linker_warnings: dict = {}
 
     @property
-    def search_path(self) -> list[str]:
+    def search_path(self) -> list[Path]:
         """The default search path."""
         # This cannot be cached because os.environ["PATH"] can be changed in
         # freeze module before the call to get_dependent_files.
         env_path = os.environ["PATH"].split(os.pathsep)
         new_path = []
         for path in self._path + self._bin_path_includes + env_path:
-            if path not in new_path and os.path.isdir(path):
-                new_path.append(path)
+            resolved_path = Path(path).resolve()
+            if resolved_path not in new_path and resolved_path.is_dir():
+                new_path.append(resolved_path)
         return new_path
 
     def find_library(
@@ -76,8 +77,7 @@ class Parser(ABC):
 
     def get_dependent_files(self, filename: str | Path) -> set[Path]:
         """Return the file's dependencies using platform-specific tools."""
-        if isinstance(filename, str):
-            filename = Path(filename)
+        filename = Path(filename).resolve()
 
         with suppress(KeyError):
             return self.dependent_files[filename]
@@ -161,15 +161,17 @@ class PEParser(Parser):
             library = self.find_library(name, search_path)
             if library:
                 dependent_files.add(library)
-            else:
-                if self._silent < 3 and name not in self.linker_warnings:
-                    print(f"WARNING: cannot find '{name}'")
-                self.linker_warnings.add(name)
+                if name in self.linker_warnings:
+                    self.linker_warnings[name] = False
+            elif name not in self.linker_warnings:
+                self.linker_warnings[name] = True
         return dependent_files
 
     def _get_dependent_files_imagehlp(self, filename: Path) -> set[Path]:
         env_path = os.environ["PATH"]
-        os.environ["PATH"] = os.pathsep.join(self.search_path)
+        os.environ["PATH"] = os.pathsep.join(
+            [os.path.normpath(path) for path in self.search_path]
+        )
         try:
             return {Path(dep) for dep in GetDependentFiles(filename)}
         except BindError as exc:
@@ -271,16 +273,18 @@ class ELFParser(Parser):
                 continue
             if partname in ("not found", "(file not found)"):
                 partname = Path(parts[0])
-                for bin_path in self.bin_path_includes:
+                for bin_path in self._bin_path_includes:
                     partname = Path(bin_path, partname)
                     if partname.is_file():
                         dependent_files.add(partname)
+                        name = partname.name
+                        if name in self.linker_warnings:
+                            self.linker_warnings[name] = False
                         break
                 if not partname.is_file():
                     name = partname.name
-                    if self._silent < 3 and name not in self.linker_warnings:
-                        print(f"WARNING: cannot find '{name}'")
-                    self.linker_warnings.add(name)
+                    if name not in self.linker_warnings:
+                        self.linker_warnings[name] = True
                 continue
             if partname.startswith("("):
                 continue
@@ -310,8 +314,11 @@ class ELFParser(Parser):
     def set_rpath(self, filename: str | Path, rpath: str) -> None:
         """Sets the rpath of the executable."""
         self._set_write_mode(filename)
-        self.run_patchelf(["--remove-rpath", filename])
-        self.run_patchelf(["--force-rpath", "--set-rpath", rpath, filename])
+        try:
+            self.run_patchelf(["--set-rpath", rpath, filename])
+        except subprocess.CalledProcessError:
+            self.run_patchelf(["--remove-rpath", filename])
+            self.run_patchelf(["--add-rpath", rpath, filename])
 
     def set_soname(self, filename: str | Path, new_so_name: str) -> None:
         """Sets DT_SONAME entry in the dynamic table."""
@@ -330,8 +337,7 @@ class ELFParser(Parser):
 
     @staticmethod
     def _set_write_mode(filename: str | Path) -> None:
-        if isinstance(filename, str):
-            filename = Path(filename)
+        filename = Path(filename)
         mode = filename.stat().st_mode
         if mode & stat.S_IWUSR == 0:
             filename.chmod(mode | stat.S_IWUSR)
