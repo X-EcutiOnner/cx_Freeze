@@ -3,17 +3,15 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 import pytest
-from generate_samples import SUB_PACKAGE_TEST, create_package, run_command
+from datatest import SUB_PACKAGE_TEST
 from setuptools import Distribution
 
-from cx_Freeze._compat import BUILD_EXE_DIR, EXE_SUFFIX, IS_WINDOWS
+from cx_Freeze._compat import BUILD_EXE_DIR, IS_WINDOWS
 from cx_Freeze.command.build_exe import build_exe
 from cx_Freeze.exception import SetupError
 
-SAMPLES_DIR = Path(__file__).resolve().parent.parent / "samples"
 BUILD_EXE_CMD = "python setup.py build_exe --silent --excludes=tkinter"
 
 OUTPUT1 = "Hello from cx_Freeze Advanced #1\nTest freeze module #1\n"
@@ -363,60 +361,58 @@ def test_build_exe_script_args(
         assert getattr(cmd_obj, option) == value
 
 
-@pytest.mark.datafiles(SAMPLES_DIR / "advanced")
-def test_build_exe_advanced(datafiles: Path) -> None:
+def test_build_exe_advanced(tmp_package) -> None:
     """Test the advanced sample."""
-    output = run_command(
-        datafiles, "python setup.py build_exe --silent --excludes=tkinter"
+    tmp_package.create_from_sample("advanced")
+    output = tmp_package.run(
+        "python setup.py build_exe --silent --excludes=tkinter"
     )
 
-    executable = datafiles / BUILD_EXE_DIR / f"advanced_1{EXE_SUFFIX}"
+    executable = tmp_package.executable("advanced_1")
     assert executable.is_file()
-    output = run_command(datafiles, executable, timeout=10)
+    output = tmp_package.run(executable, timeout=10)
     assert output == OUTPUT1
 
-    executable = datafiles / BUILD_EXE_DIR / f"advanced_2{EXE_SUFFIX}"
+    executable = tmp_package.executable("advanced_2")
     assert executable.is_file()
-    output = run_command(datafiles, executable, timeout=10)
+    output = tmp_package.run(executable, timeout=10)
     assert output == OUTPUT2
 
 
-@pytest.mark.datafiles(SAMPLES_DIR / "asmodule")
-def test_build_exe_asmodule(datafiles: Path) -> None:
+def test_build_exe_asmodule(tmp_package) -> None:
     """Test the asmodule sample."""
-    output = run_command(datafiles, BUILD_EXE_CMD)
+    tmp_package.create_from_sample("asmodule")
+    output = tmp_package.run(BUILD_EXE_CMD)
 
-    executable = datafiles / BUILD_EXE_DIR / f"asmodule{EXE_SUFFIX}"
+    executable = tmp_package.executable("asmodule")
     assert executable.is_file()
-    output = run_command(datafiles, executable, timeout=10)
+    output = tmp_package.run(executable, timeout=10)
     assert output.startswith("Hello from cx_Freeze")
 
 
-def test_zip_include_packages(tmp_path) -> None:
+def test_zip_include_packages(tmp_package) -> None:
     """Test the simple sample with zip_include_packages option."""
     source = SUB_PACKAGE_TEST[4]
-    create_package(tmp_path, source)
-    output = run_command(
-        tmp_path,
+    tmp_package.create(source)
+    output = tmp_package.run(
         f"{BUILD_EXE_CMD} --zip-exclude-packages=* --zip-include-packages=p",
     )
 
-    executable = tmp_path / BUILD_EXE_DIR / f"main{EXE_SUFFIX}"
+    executable = tmp_package.executable("main")
     assert executable.is_file()
-    output = run_command(tmp_path, executable, timeout=10)
+    output = tmp_package.run(executable, timeout=10)
     assert output == OUTPUT_SUBPACKAGE_TEST
 
 
-def test_zip_exclude_packages(tmp_path) -> None:
+def test_zip_exclude_packages(tmp_package) -> None:
     """Test the simple sample with zip_exclude_packages option."""
     source = SUB_PACKAGE_TEST[4]
-    create_package(tmp_path, source)
-    output = run_command(
-        tmp_path,
+    tmp_package.create(source)
+    output = tmp_package.run(
         f"{BUILD_EXE_CMD} --zip-exclude-packages=p --zip-include-packages=*",
     )
 
-    executable = tmp_path / BUILD_EXE_DIR / f"main{EXE_SUFFIX}"
+    executable = tmp_package.executable("main")
     assert executable.is_file()
-    output = run_command(tmp_path, executable, timeout=10)
+    output = tmp_package.run(executable, timeout=10)
     assert output == OUTPUT_SUBPACKAGE_TEST

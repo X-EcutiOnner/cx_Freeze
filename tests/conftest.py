@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import string
 import sys
 from pathlib import Path
@@ -25,12 +26,23 @@ SAMPLES_DIR = HERE.parent / "samples"
 class TempPackage:
     """Base class to create package in temporary path."""
 
-    def __init__(self, path: Path) -> None:
-        self.path: Path = path
-        self.monkeypatch = pytest.MonkeyPatch()
+    def __init__(
+        self,
+        request: pytest.FixtureRequest,
+        tmp_path_factory: pytest.TempPathFactory,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        self.request = request
+        self.tmp_path_factory = tmp_path_factory
+        self.monkeypatch = monkeypatch
 
-    def __del__(self) -> None:
-        self.monkeypatch.undo()
+        # make a temporary directory and set it as current
+        name = request.node.name
+        name = re.sub(r"[\W]", "_", name)
+        MAXVAL = 30
+        name = name[:MAXVAL]
+        self.path = tmp_path_factory.mktemp(name, numbered=True)
+        monkeypatch.chdir(self.path)
 
     def create(self, source: str) -> None:
         """Create package in temporary path, based on source."""
@@ -48,7 +60,6 @@ class TempPackage:
                     )
                     buf = []
                 filename = self.path / line.strip()
-        self.monkeypatch.chdir(self.path)
 
     def create_from_sample(self, sample: str) -> None:
         """Create package in path, based on sample."""
@@ -59,7 +70,6 @@ class TempPackage:
             ignore=ignore_patterns("build", "dist"),
             dirs_exist_ok=True,
         )
-        self.monkeypatch.chdir(self.path)
 
     def executable(self, base_name: str) -> Path:
         return self.path / BUILD_EXE_DIR / f"{base_name}{EXE_SUFFIX}"
@@ -100,8 +110,26 @@ class TempPackage:
             command, text=True, timeout=timeout, cwd=os.fspath(self.path)
         )
 
+    def install(self, package) -> None:
+        if which("uv") is None:
+            pytest.skip(reason=f"{package} must be installed")
+
+        tmp_prefix = self.path / ".tmp_prefix"  # type: Path
+        self.run(
+            f"uv pip install {package}"
+            f" --prefix={tmp_prefix} --python={sys.executable}"
+        )
+        tmp_site = tmp_prefix.joinpath(
+            Path(pytest.__file__).parent.parent.relative_to(sys.prefix)
+        )
+        self.monkeypatch.setenv("PYTHONPATH", os.path.normpath(tmp_site))
+
 
 @pytest.fixture
-def tmp_package(tmp_path: Path) -> TempPackage:
+def tmp_package(
+    request: pytest.FixtureRequest,
+    tmp_path_factory: pytest.TempPathFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> TempPackage:
     """Create package in temporary path, based on source (or sample)."""
-    return TempPackage(tmp_path)
+    return TempPackage(request, tmp_path_factory, monkeypatch)
